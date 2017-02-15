@@ -1,0 +1,111 @@
+#!/bin/bash
+# shadowsocks        Startup script for the jumpserver Server
+#
+# chkconfig: - 85 12
+# description: Open source detecting system
+# processname: ssproxy
+# Date: 2017-01-17
+# Version: 0.0.1
+
+ssproxy_dir=/opt/ssproxy
+
+base_dir=$(dirname $0)
+ssproxy_dir=${ssproxy_dir:-$base_dir}
+export PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+if [ -f ${ssproxy_dir}/install/functions ];then
+    . ${ssproxy_dir}/install/functions
+elif [ -f /etc/init.d/functions ];then
+    . /etc/init.d/functions
+else
+    echo "No functions script found in [./functions, ./install/functions, /etc/init.d/functions]"
+    exit 1
+fi
+
+PROC_NAME="sslocal"
+lockfile=/var/lock/subsys/${PROC_NAME}
+
+start() {
+        ssproxy_start=$"Starting ${PROC_NAME} service:"
+        if [ -f $lockfile ];then
+             echo -n "jumpserver is running..."
+             success "$ssproxy_start"
+             echo
+        else
+            daemon $ssproxy_dir/startssproxy.sh &>> /var/log/jumpserver.log 2>&1
+            sleep 1
+            echo -n "$ssproxy_start"
+            ps axu | grep 'sslocal' | grep -v 'grep' &> /dev/null
+            if [ $? == '0' ];then
+                success "$ssproxy_start"
+                if [ ! -e $lockfile ]; then
+                    lockfile_dir=`dirname $lockfile`
+                    mkdir -pv $lockfile_dir
+                fi
+                touch "$lockfile"
+                echo
+            else
+                failure "$ssproxy_start"
+                echo
+            fi
+        fi
+}
+
+
+stop() {
+    echo -n $"Stopping ${PROC_NAME} service:"
+    ps aux | grep -E 'sslocal' | grep -v grep | awk '{print $2}' | xargs kill -9 &> /dev/null
+    ret=$?
+    if [ $ret -eq 0 ]; then
+        echo_success
+        echo
+        rm -f "$lockfile"
+    else
+        echo_failure
+        echo
+        rm -f "$lockfile"
+    fi
+
+}
+
+status(){
+    ps axu | grep 'run_server' | grep -v 'grep' &> /dev/null
+    if [ $? == '0' ];then
+        echo -n "ssproxy is running..."
+        success
+        touch "$lockfile"
+        echo
+    else
+        echo -n "ssproxy is not running."
+        failure
+        echo
+    fi
+}
+
+
+
+restart(){
+    stop
+    start
+}
+
+# See how we were called.
+case "$1" in
+  start)
+        start
+        ;;
+  stop)
+        stop
+        ;;
+
+  restart)
+        restart
+        ;;
+
+  status)
+        status
+        ;;
+  *)
+        echo $"Usage: $0 {start|stop|restart|status}"
+        exit 2
+esac
